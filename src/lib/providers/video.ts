@@ -51,44 +51,37 @@ export const basis: VideoProvider = {
 };
 
 /**
- * Google Veo via the Gemini API (long-running prediction). EXPERIMENTAL: written from the public API shape,
- * never exercised here because no key was available. Model name and price are settings, not assumptions baked into code.
+ * Gemini Omni Flash via the Gemini Interactions API (successor of Veo 3.1 in the Gemini API, which Google shut down on 2026-10-22).
+ * Request and response shape follow https://aistudio.google.com/docs/omni (REST): one synchronous POST, the clip comes back
+ * base64-encoded in steps[].content[]. Clips are 3–15 s with native audio; the audio is dropped because the studio adds its own narration mix.
  */
-export function veo(apiKey: string, model: string, usdPerSecond: number): VideoProvider {
-  const base = "https://generativelanguage.googleapis.com/v1beta";
-  const headers = { "x-goog-api-key": apiKey, "content-type": "application/json" };
+const OMNI_USD_PER_SEC: Record<string, number> = { "360p": 0.023, "720p": 0.07, "1080p": 0.104 }; // from the pricing page, 2026-11
+export function omni(apiKey: string, model: string, resolution: "360p" | "720p" | "1080p"): VideoProvider {
+  const clip = (seconds: number) => Math.max(3, Math.min(15, Math.ceil(seconds)));
   return {
-    name: "veo", label: `Google Veo (${model}, experimentell/ungetestet)`, paid: true, generative: true,
-    estimate: (seconds) => Math.min(8, Math.ceil(seconds)) * usdPerSecond,
+    name: "omni", label: `Gemini Omni Flash (${model}, ${resolution})`, paid: true, generative: true,
+    estimate: (seconds) => clip(seconds) * (OMNI_USD_PER_SEC[resolution] ?? 0.07),
     async generate({ prompt, seconds, width, height, outFile, signal }) {
-      const aspectRatio = width >= height ? "16:9" : "9:16";
-      const start = await fetch(`${base}/models/${model}:predictLongRunning`, {
-        method: "POST", headers, signal,
-        body: JSON.stringify({ instances: [{ prompt: `${prompt}. No on-screen text, no captions, no logos.` }], parameters: { aspectRatio } }),
-      });
-      if (start.status === 401 || start.status === 403) throw new ProviderError("veo", "Der Gemini-API-Schlüssel ist ungültig oder hat keinen Veo-Zugriff.");
-      if (start.status === 429) throw new ProviderError("veo", "Rate-Limit bei Google erreicht.", true);
-      if (!start.ok) throw new ProviderError("veo", `Veo-Fehler ${start.status}: ${(await start.text()).slice(0, 300)}`, start.status >= 500);
-      const op = (await start.json()) as { name: string };
-      for (let i = 0; i < 90; i++) {
-        await new Promise((r) => setTimeout(r, 10_000));
-        if (signal?.aborted) throw new Error("abgebrochen");
-        const st = (await (await fetch(`${base}/${op.name}`, { headers, signal })).json()) as { done?: boolean; error?: { message: string }; response?: { generateVideoResponse?: { generatedSamples?: { video?: { uri?: string } }[] } } };
-        if (st.error) throw new ProviderError("veo", `Veo: ${st.error.message}`);
-        if (!st.done) continue;
-        const uri = st.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
-        if (!uri) throw new ProviderError("veo", "Veo lieferte kein Video (möglicherweise durch Inhaltsfilter blockiert).");
-        const dl = await fetch(uri, { headers: { "x-goog-api-key": apiKey }, signal });
-        if (!dl.ok) throw new ProviderError("veo", `Download des Veo-Clips fehlgeschlagen (${dl.status}).`, true);
-        const raw = outFile + ".src.mp4";
-        fs.writeFileSync(raw, Buffer.from(await dl.arrayBuffer()));
-        // Conform to target size / duration (loop if the clip is shorter than the narration), drop native audio.
-        await ffmpeg(["-stream_loop", "-1", "-i", raw, "-t", seconds.toFixed(3), "-vf", `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=30,format=yuv420p`,
-          "-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-an", outFile], signal);
-        fs.rmSync(raw, { force: true });
-        return;
-      }
-      throw new ProviderError("veo", "Zeitüberschreitung bei der Veo-Generierung.", true);
+      const res = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+        method: "POST", headers: { "x-goog-api-key": apiKey, "content-type": "application/json" },
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(600_000)]) : AbortSignal.timeout(600_000),
+        body: JSON.stringify({
+          model, input: `${prompt}. No on-screen text, no captions, no logos, no dialogue.`,
+          response_format: { type: "video", aspect_ratio: width >= height * 1.2 ? "16:9" : "9:16", resolution, duration: `${clip(seconds)}s` },
+        }),
+      }).catch((e) => { throw new ProviderError("omni", `Gemini API nicht erreichbar: ${e.message}`, true); });
+      if (res.status === 401 || res.status === 403) throw new ProviderError("omni", `Der Gemini-API-Schlüssel ist ungültig oder hat keinen Zugriff auf ${model} (kostenpflichtiger Tarif nötig).`);
+      if (res.status === 429) throw new ProviderError("omni", "Rate-Limit oder Kontingent bei Google erreicht.", true);
+      if (!res.ok) throw new ProviderError("omni", `Gemini-Fehler ${res.status}: ${(await res.text()).slice(0, 300)}`, res.status >= 500);
+      const body = (await res.json()) as { status?: string; steps?: { type: string; content?: { type: string; data?: string }[] }[] };
+      const data = body.steps?.flatMap((st) => st.content || []).find((c) => c.type === "video" && c.data)?.data;
+      if (!data) throw new ProviderError("omni", `Gemini lieferte kein Video (Status: ${body.status || "unbekannt"}; möglicherweise durch Inhaltsfilter blockiert).`);
+      const raw = outFile + ".src.mp4";
+      fs.writeFileSync(raw, Buffer.from(data, "base64"));
+      // Conform to target size / duration (loop if the clip is shorter than the narration), drop native audio.
+      await ffmpeg(["-stream_loop", "-1", "-i", raw, "-t", seconds.toFixed(3), "-vf", `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=30,format=yuv420p`,
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-an", outFile], signal);
+      fs.rmSync(raw, { force: true });
     },
   };
 }
@@ -101,6 +94,6 @@ export async function getVideoProvider(allowPaid: boolean): Promise<VideoProvide
   if (o) return o;
   const prefs = await getPrefs();
   const key = await getSecret("GEMINI_API_KEY");
-  if (prefs.videoProvider === "veo" && key && allowPaid) return veo(key, prefs.veoModel, prefs.veoUsdPerSecond);
+  if (prefs.videoProvider === "omni" && key && allowPaid) return omni(key, prefs.videoModel, prefs.profile === "premium" ? "1080p" : "720p");
   return basis;
 }

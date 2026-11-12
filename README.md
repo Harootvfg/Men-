@@ -2,17 +2,19 @@
 
 Webanwendung, die aus einem Thema (oder ganz ohne Vorgabe) ein fertiges Kurzvideo produziert: Recherche → Strategie → Drehbuch → Sprachaufnahme → Bildmaterial → Schnitt mit Untertiteln → Qualitätsprüfung → Veröffentlichungstexte → MP4-Download.
 
-**Wichtig zum Stand:** Ohne Anbieter-Schlüssel läuft die App im **Basis-Modus**. Dabei entsteht eine echte, gültige MP4 (1080×1920, H.264/AAC, Untertitel, Musikbett), aber mit prozeduralen Motion-Hintergründen, einer synthetischen Stimme und regelbasierten Texten. Das ist keine generative Filmproduktion und wird in der Oberfläche auch so gekennzeichnet. Was getestet ist und was nicht, steht unter [Stand der Funktionen](#stand-der-funktionen).
+**Wichtig zum Stand:** Ohne Anbieter-Schlüssel läuft die App im **Basis-Modus**. Dabei entsteht eine echte, gültige MP4 (1080×1920, H.264/AAC, Untertitel, Musikbett), aber mit prozeduralen Motion-Hintergründen, einer lokal erzeugten Stimme (Piper) und regelbasierten Texten. Das ist keine generative Filmproduktion und wird in der Oberfläche auch so gekennzeichnet. Was getestet ist und was nicht, steht unter [Stand der Funktionen](#stand-der-funktionen).
 
 ## Schnellstart
 
-Voraussetzungen: Node.js ≥ 22, FFmpeg ≥ 6 (mit libass), eSpeak NG, Schriftart Inter (optional).
+Voraussetzungen: Node.js ≥ 22, FFmpeg ≥ 6 (mit libass), Python 3 mit Piper (kostenlose neuronale Stimme), eSpeak NG als Rückfallebene, Schriftart Inter (optional).
 
 ```bash
 # Debian/Ubuntu
-sudo apt-get install -y ffmpeg espeak-ng fonts-inter
+sudo apt-get install -y ffmpeg espeak-ng fonts-inter python3-pip
+pip install piper-tts            # lokale Stimme, kostenlos
 
 npm ci
+bash scripts/get-voices.sh      # lädt die Piper-Stimmen (ca. 230 MB) nach ./voices
 cp .env.example .env.local      # optional, alle Werte dürfen leer bleiben
 npm run build && npm start      # http://localhost:3000
 # oder für die Entwicklung: npm run dev
@@ -34,7 +36,7 @@ Alle Schlüssel sind optional und können in der App unter **Einstellungen** hin
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Agenten: Strategie, Drehbuch, Qualitätsprüfung mit Einzelbildern, Metadaten, Rückfragen | Tokenpreise des gewählten Modells; die App erfasst sie je Aufruf |
 | `ELEVENLABS_API_KEY` + Voice-ID | Natürliche Stimme | je Zeichen, abhängig vom Tarif |
-| `GEMINI_API_KEY` | Veo-Videoclips (experimentell) | je Sekunde; Preis in den Einstellungen pflegen |
+| `GEMINI_API_KEY` | Videoclips mit Gemini Omni Flash (nur kostenpflichtiger Tarif) | ca. 0,07 $ je Sekunde bei 720p |
 | `YOUTUBE_API_KEY` | Zusätzliche Trendquelle | kostenloses Kontingent |
 
 Kostenschutz: Kostenpflichtige Medienanbieter laufen nur, wenn „Kostenpflichtige Generierung freigeben“ aktiv ist. Vor jedem kostenpflichtigen Aufruf wird das Budgetlimit pro Video geprüft. Automatische Überarbeitungsrunden sind auf zwei begrenzt. Unveränderte Szenen kommen aus dem Cache.
@@ -94,6 +96,7 @@ Ergebnisse des letzten Laufs: siehe [TESTS.md](TESTS.md).
 
 - Beide Erstellungsmodi (Autopilot, eigenes Thema mit 3–5 dynamischen Rückfragen)
 - Workflow-Engine mit persistierten Schritten, Abbruch, Fortsetzen, Wiederholungsversuchen
+- Kostenlose Sprachausgabe mit Piper (Deutsch: Thorsten, Englisch: LJSpeech), eSpeak als Rückfallebene
 - Basis-Pipeline bis zur MP4 mit Tonspur, eingebrannten Untertiteln, SRT, Cover, ZIP
 - Formate 9:16 und 1:1 (16:9 und 4:5 nutzen denselben Code, sind aber nicht einzeln getestet)
 - Technische Qualitätsprüfung an der fertigen Datei (Streams, Auflösung, Länge, Dekodierung, Schwarzbild, Stille, Standbild, Lautheit, Untertitel, sichere Bereiche)
@@ -107,7 +110,7 @@ Ergebnisse des letzten Laufs: siehe [TESTS.md](TESTS.md).
 
 - Claude-Anbindung der Agenten (`providers/llm.ts`): Der Datenfluss inklusive Überarbeitungsschleife und Übergabe von Einzelbildern ist mit einem simulierten Sprachmodell getestet. Ein echter API-Aufruf wurde nicht ausgeführt.
 - ElevenLabs-Sprachausgabe: nicht live getestet.
-- Google Veo: nach öffentlicher API-Beschreibung geschrieben, nie ausgeführt. Modellname, Antwortformat und Preis vor dem ersten Einsatz prüfen.
+- Gemini Omni Flash (Nachfolger von Veo 3.1, das Google am 22.10.2026 in der Gemini API abgeschaltet hat): Adapter nach der offiziellen REST-Beschreibung geschrieben, mangels Schlüssel nie ausgeführt.
 - PostgreSQL über `DATABASE_URL`, Dockerfile, docker-compose: nicht getestet (die App nutzt dieselben SQL-Abfragen wie mit PGlite).
 
 **Nicht umgesetzt**
@@ -127,4 +130,5 @@ Ergebnisse des letzten Laufs: siehe [TESTS.md](TESTS.md).
 - Sensible Nachrichtenthemen (Todesfälle, Gewalt usw.) werden per Stichwortliste herabgestuft. Das ersetzt keine redaktionelle Prüfung.
 - KI-generierte Inhalte müssen je nach Plattform beim Upload gekennzeichnet werden. Das übernimmt die App nicht.
 - Für ElevenLabs nur eigene oder lizenzierte Stimmen verwenden.
+- Piper steht unter GPL-3 und wird als eigenständiges Programm aufgerufen; die Stimmen Thorsten (CC0) und LJSpeech (gemeinfrei) dürfen frei verwendet werden.
 - Remotion wird nicht verwendet (lizenzpflichtig für Unternehmen); das Rendering basiert vollständig auf FFmpeg.

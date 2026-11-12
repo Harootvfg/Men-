@@ -2,12 +2,12 @@
 import { useEffect, useState } from "react";
 import { api, Badge, Button, Card, ErrorNote, Field, inputCls, Note, PageHeader, useData } from "@/components/ui";
 
-interface Prefs { language: string; geo: string; durationSec: number; platform: string; profile: string; maxCostUsd: number; allowPaid: boolean; llmModel: string; ttsProvider: string; videoProvider: string; elevenVoiceId: string; espeakVoice: string; veoModel: string; veoUsdPerSecond: number; subtitleStyle: string; brand: { primary: string; secondary: string; font: string; watermark: string } }
+interface Prefs { language: string; geo: string; durationSec: number; platform: string; profile: string; maxCostUsd: number; allowPaid: boolean; llmModel: string; ttsProvider: string; videoProvider: string; elevenVoiceId: string; espeakVoice: string; videoModel: string; subtitleStyle: string; brand: { primary: string; secondary: string; font: string; watermark: string } }
 interface Data { prefs: Prefs; secrets: Record<string, { set: boolean; source: string | null; hint: string }>; system: { ffmpeg: boolean; espeak: boolean; database: string } }
 const KEYS: [string, string, string][] = [
   ["ANTHROPIC_API_KEY", "Anthropic (Claude)", "Sprachmodell für Strategie, Drehbuch, Qualitätsprüfung und Metadaten."],
   ["ELEVENLABS_API_KEY", "ElevenLabs", "Natürlich klingende Sprachausgabe. Kostenpflichtig; Integration ohne Schlüssel nicht live getestet."],
-  ["GEMINI_API_KEY", "Google AI (Veo)", "Generative Videoclips. Kostenpflichtig; experimentell und nicht live getestet."],
+  ["GEMINI_API_KEY", "Google AI (Gemini Omni Flash)", "Generative Videoclips mit 3–15 Sekunden. Nur im kostenpflichtigen Tarif, ca. 0,07 $ pro Sekunde bei 720p."],
   ["YOUTUBE_API_KEY", "YouTube Data API", "Zusätzliche Trendquelle (meistgesehene Videos). Kostenloses Kontingent."],
 ];
 
@@ -55,11 +55,11 @@ export default function Settings() {
         <h2 className="text-base font-semibold">Anbieter</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field label="Sprachmodell" hint="Modell-ID der Claude API."><select className={inputCls} value={p.llmModel} onChange={(e) => set({ llmModel: e.target.value })}>{["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2"].map((m) => <option key={m}>{m}</option>)}</select></Field>
-          <Field label="Videoanbieter"><select className={inputCls} value={p.videoProvider} onChange={(e) => set({ videoProvider: e.target.value })}><option value="basis">Basis-Renderer (lokal, kostenlos)</option><option value="veo">Google Veo (experimentell)</option></select></Field>
-          <Field label="Sprachausgabe"><select className={inputCls} value={p.ttsProvider} onChange={(e) => set({ ttsProvider: e.target.value })}><option value="auto">Automatisch</option><option value="espeak">Lokale Basisstimme</option><option value="elevenlabs">ElevenLabs</option></select></Field>
+          <Field label="Videoanbieter"><select className={inputCls} value={p.videoProvider} onChange={(e) => set({ videoProvider: e.target.value })}><option value="basis">Basis-Renderer (lokal, kostenlos)</option><option value="omni">Gemini Omni Flash (kostenpflichtig)</option></select></Field>
+          <Field label="Sprachausgabe"><select className={inputCls} value={p.ttsProvider} onChange={(e) => set({ ttsProvider: e.target.value })}><option value="auto">Automatisch</option><option value="piper">Piper (lokal, neuronal, kostenlos)</option><option value="espeak">eSpeak (lokal, einfach)</option><option value="elevenlabs">ElevenLabs</option></select></Field>
           <Field label="ElevenLabs Voice-ID" hint="Aus deiner ElevenLabs-Stimmenbibliothek. Nur eigene oder lizenzierte Stimmen verwenden."><input className={inputCls} value={p.elevenVoiceId} onChange={(e) => set({ elevenVoiceId: e.target.value.trim() })} /></Field>
-          <Field label="Lokale Stimme" hint="eSpeak-Stimmenname, z. B. de, en-us, en-gb."><input className={inputCls} value={p.espeakVoice} onChange={(e) => set({ espeakVoice: e.target.value.trim() || "auto" })} /></Field>
-          <Field label="Veo-Modell und Preis je Sekunde (USD)" hint="Bitte mit der aktuellen Google-Preisliste abgleichen."><div className="flex gap-2"><input className={inputCls} value={p.veoModel} onChange={(e) => set({ veoModel: e.target.value.trim() })} /><input inputMode="decimal" className={inputCls + " max-w-24"} value={String(p.veoUsdPerSecond)} onChange={(e) => set({ veoUsdPerSecond: Number(e.target.value.replace(",", ".")) || 0 })} /></div></Field>
+          <Field label="eSpeak-Stimme (Rückfallebene)" hint="Nur relevant, wenn Piper nicht installiert ist. Z. B. de, en-us."><input className={inputCls} value={p.espeakVoice} onChange={(e) => set({ espeakVoice: e.target.value.trim() || "auto" })} /></Field>
+          <Field label="Videomodell" hint="Modell-ID der Gemini API. Profil Premium rendert in 1080p (ca. 0,10 $ pro Sekunde), sonst 720p."><input className={inputCls} value={p.videoModel} onChange={(e) => set({ videoModel: e.target.value.trim() })} /></Field>
         </div>
       </Card>
       <Card className="p-5">

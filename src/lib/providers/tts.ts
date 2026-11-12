@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { run, ffmpeg, hasBinary } from "../exec";
 import { getPrefs, getSecret } from "../settings";
 import { ProviderError } from "./llm";
@@ -38,6 +39,30 @@ export const espeak: TtsProvider = {
   },
 };
 
+const PIPER_VOICES: Record<string, string> = { de: "de_DE-thorsten-high", en: "en_US-ljspeech-high" };
+const voicesDir = () => path.resolve(process.env.PIPER_VOICES_DIR || "./voices");
+let piperOk: boolean | undefined;
+export async function piperAvailable(language: "de" | "en"): Promise<boolean> {
+  if (!fs.existsSync(path.join(voicesDir(), PIPER_VOICES[language] + ".onnx"))) return false;
+  if (piperOk === undefined) piperOk = await run("python3", ["-c", "import piper"]).then(() => true, () => false);
+  return piperOk;
+}
+
+/** Piper: free, local neural text-to-speech (separate GPL-3 command-line program; voices CC0 / public domain). */
+export const piper: TtsProvider = {
+  name: "piper", label: "Piper (lokale neuronale Stimme, kostenlos)", paid: false,
+  estimate: () => 0,
+  async synthesize({ text, language, tone, outFile }) {
+    const model = path.join(voicesDir(), PIPER_VOICES[language] + ".onnx");
+    const t = tone.toLowerCase();
+    const length = /emotion|ruhig|calm|warm/.test(t) ? 1.1 : /energ|dynam|schnell|humor|lustig|fun/.test(t) ? 0.92 : /spann|dramat|myster|ernst/.test(t) ? 1.05 : 1.0;
+    const raw = outFile + ".raw.wav";
+    await run("python3", ["-m", "piper", "-m", model, "-f", raw, "--length-scale", String(length), "--sentence-silence", "0.25"], { input: text, timeoutMs: 120_000 });
+    await ffmpeg(["-i", raw, "-af", "highpass=f=60,acompressor=threshold=-20dB:ratio=2.5:attack=5:release=80,aresample=48000", "-ac", "1", outFile]);
+    fs.rmSync(raw, { force: true });
+  },
+};
+
 /** ElevenLabs text-to-speech. Implemented against the public REST API; requires a key (not live-tested without one). */
 export function elevenlabs(apiKey: string, voiceId: string): TtsProvider {
   return {
@@ -65,12 +90,15 @@ export function elevenlabs(apiKey: string, voiceId: string): TtsProvider {
 type G = typeof globalThis & { __vasTtsOverride?: TtsProvider };
 export function setTtsOverride(p: TtsProvider | undefined) { (globalThis as G).__vasTtsOverride = p; }
 
-export async function getTts(allowPaid: boolean): Promise<TtsProvider> {
+export const getTts = (allowPaid: boolean) => getTtsFor(null, allowPaid);
+/** Picks the best allowed voice provider; `language` overrides the default language when a project differs. */
+export async function getTtsFor(language: "de" | "en" | null, allowPaid: boolean): Promise<TtsProvider> {
   const o = (globalThis as G).__vasTtsOverride;
   if (o) return o;
   const prefs = await getPrefs();
   const key = await getSecret("ELEVENLABS_API_KEY");
   const wantEleven = prefs.ttsProvider === "elevenlabs" || (prefs.ttsProvider === "auto" && !!key);
   if (wantEleven && key && prefs.elevenVoiceId && allowPaid) return elevenlabs(key, prefs.elevenVoiceId);
+  if (prefs.ttsProvider !== "espeak" && (await piperAvailable(language || prefs.language))) return piper;
   return espeak;
 }

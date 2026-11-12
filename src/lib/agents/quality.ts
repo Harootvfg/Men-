@@ -95,6 +95,7 @@ export async function runQuality(state: ProjectState, projectId: string, log: (m
   }
   const basisVideo = (state.render?.mode || "basis").includes("basis");
   const espeakVoice = Object.values(state.assets || {}).some((a) => a.ttsProvider === "espeak");
+  const piperVoice = Object.values(state.assets || {}).some((a) => a.ttsProvider === "piper");
   const techOk = (ids: string[]) => ids.every((id) => checks.find((c) => c.id === id)?.passed);
   let review: ContentReview | null = null;
   let reviewMode: QaReport["reviewMode"] = "heuristic";
@@ -127,7 +128,7 @@ Technische Prüfungen: ${JSON.stringify(checks)}`,
     fit: { score: sc.audienceFit * 10, reason: "Selbsteinschätzung des Drehbuch-Agenten, nicht unabhängig geprüft." },
     originality: { score: sc.originality * 10, reason: "Selbsteinschätzung des Drehbuch-Agenten, nicht unabhängig geprüft." },
     visual: { score: !techOk(["decode", "black", "resolution"]) ? 20 : basisVideo ? 50 : 70, reason: basisVideo ? "Technisch sauber, aber prozedurale Hintergründe statt szenenspezifischer Bilder (Basis-Renderer)." : "Technisch sauber; Bildinhalt nicht multimodal geprüft." },
-    audio: { score: !techOk(["silence", "streams"]) ? 20 : (espeakVoice ? 45 : 75) + (techOk(["loudness"]) ? 10 : 0), reason: `${espeakVoice ? "Synthetische Basisstimme (eSpeak)" : "Externer Sprachanbieter"}; Lautheit ${lufs?.toFixed(1) ?? "?"} LUFS.` },
+    audio: { score: !techOk(["silence", "streams"]) ? 20 : (espeakVoice ? 45 : piperVoice ? 62 : 75) + (techOk(["loudness"]) ? 10 : 0), reason: `${espeakVoice ? "Synthetische Basisstimme (eSpeak)" : piperVoice ? "Lokale neuronale Stimme (Piper), nicht durch Anhören geprüft" : "Externer Sprachanbieter"}; Lautheit ${lufs?.toFixed(1) ?? "?"} LUFS.` },
   };
   const categories = WEIGHTS.map(([key, label, weight]) => {
     if (review) {
