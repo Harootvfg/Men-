@@ -14,6 +14,10 @@ export const hookTotal = (h: Hook) => h.scores.curiosity * 0.3 + h.scores.clarit
 export function topicForms(input: string, de: boolean) {
   let topic = input.trim().replace(/^(bitte\s+)?(erstelle|erstell|mach|mache|generiere|produziere|create|make|generate)\b[^,:]*?\b(video|clip|reel|short)s?\b\s*(darüber|über|zum thema|zu|about|on)?[\s,:]*/i, "").replace(/[.?!\s]+$/, "");
   if (!topic) topic = input.trim().replace(/[.?!\s]+$/, "");
+  // Production directives in the prompt ("…? 20 Sekunden, lustig") are not part of the spoken topic.
+  const q = topic.indexOf("?");
+  if (q > 8) topic = topic.slice(0, q);
+  topic = topic.replace(/[,;.]?\s*\(?\b\d{1,3}\s*(sekunden|sek|seconds|secs?)\b.*$/i, "").replace(/[,;]\s*(lustig|emotional|spannend|dramatisch|sachlich|humorvoll|funny|auf (deutsch|englisch)|für (tiktok|reels|shorts|instagram|youtube))\b.*$/i, "").trim() || topic;
   topic = topic.charAt(0).toUpperCase() + topic.slice(1);
   const isQuestion = /^(was|wie|warum|wieso|weshalb|wer|wann|wo|what|why|how|who|when|where)\b/i.test(topic) || /\?\s*$/.test(input);
   const words = topic.split(/\s+/);

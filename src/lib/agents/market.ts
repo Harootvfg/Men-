@@ -4,7 +4,7 @@ import { fetchAllSignals, newsDemand, type SourceResult } from "../providers/res
 import { Strategy, type Brief, type Concept, type ProjectState, type TrendCandidate, type TrendSignal } from "../schemas";
 
 const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^\p{L}\p{N} ]+/gu, " ").replace(/\s+/g, " ").trim();
-const SENSITIVE = /\b(tot|tod|gestorben|stirbt|verstorben|mord|ermordet|anschlag|terror|amok|krieg|unfall|absturz|missbrauch|vergewaltig|suizid|selbstmord|geisel|attentat|died|death|dead|killed|murder|shooting|war|crash|abuse|suicide|rape|höß|hitler|holocaust|kz )/i;
+const SENSITIVE = /(\b(tot|tod|died|death|dead|killed|war|crash|rape|kz)\b|gestorben|stirbt|verstorben|mord|mörder|anschlag|terror|amok|krieg|unfall|absturz|missbrauch|vergewaltig|suizid|geisel|attentat|murder|shooting|abuse|suicide|höß|hitler|holocaust)/i;
 
 export const SCORE_DISCLAIMER = "Der Trend-Score ist eine interne Priorisierung aus den unten genannten Komponenten und keine Vorhersage von Reichweite oder Viralität.";
 
