@@ -1,0 +1,56 @@
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value JSONB NOT NULL);
+CREATE TABLE IF NOT EXISTS projects (
+  id TEXT PRIMARY KEY,
+  mode TEXT NOT NULL,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL,
+  cancel_requested BOOLEAN NOT NULL DEFAULT FALSE,
+  state JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS events (
+  id SERIAL PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+  level TEXT NOT NULL,
+  step TEXT NOT NULL,
+  message TEXT NOT NULL,
+  data JSONB
+);
+CREATE INDEX IF NOT EXISTS events_project ON events(project_id, id);
+CREATE TABLE IF NOT EXISTS costs (
+  id SERIAL PRIMARY KEY,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+  provider TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  amount_usd DOUBLE PRECISION NOT NULL,
+  detail TEXT
+);
+CREATE TABLE IF NOT EXISTS trend_snapshots (
+  id SERIAL PRIMARY KEY,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  geo TEXT NOT NULL,
+  data JSONB NOT NULL
+);
+CREATE TABLE IF NOT EXISTS manual_trends (
+  id SERIAL PRIMARY KEY,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  platform TEXT NOT NULL,
+  title TEXT NOT NULL,
+  note TEXT,
+  url TEXT
+);
+CREATE TABLE IF NOT EXISTS metrics (
+  id SERIAL PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL,
+  recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  published_at DATE,
+  views INTEGER NOT NULL DEFAULT 0,
+  likes INTEGER NOT NULL DEFAULT 0,
+  comments INTEGER NOT NULL DEFAULT 0,
+  shares INTEGER NOT NULL DEFAULT 0,
+  retention_pct DOUBLE PRECISION
+);
